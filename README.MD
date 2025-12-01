@@ -1,234 +1,209 @@
 # Willans Prime Generator
 
-A Python implementation of Willans' formula for computing the **nth prime number**, using two interchangeable primality detectors:
+This repository implements a computational version of **Willans’ formula** for determining the *nth prime number*.  
+Instead of evaluating the original symbolic expression, the method reconstructs Willans’ prime-indexing behavior using:
 
-- **Wilson-based detector** (theoretically elegant, extremely slow)
-- **Trial-division detector** (practically faster, simpler)
+- A **primality detector**  
+- A **prime-counting accumulator**  
+- A **termination condition** when the nth prime is reached  
 
-The project provides:
+Two detectors are implemented:
 
-- Modular detector implementations
-- A unified compute system
-- A benchmarking script
-- Graph output comparing detector efficiency
-- A CLI for generating primes and printing all primes ≤ n
+1. **Trial Division Detector** — the recommended, efficient method  
+2. **Wilson’s Theorem Detector** — mathematically interesting but significantly slower  
 
----
-
-##  Project Structure
-
-```
-/project
-│
-├── detectors.py              # Wilson + Trial primality detectors
-├── willans.py                # Main Willans compute module
-├── main.py                   # CLI runner (merged logic)
-├── compare_detectors.py      # Benchmark + PNG plot
-└── README.md                 # This file
-```
+A benchmarking script compares both detectors and produces a timing graph.
 
 ---
 
-# 1.  Mathematical Background
+# Mathematical Basis
 
-Willans' formula (1949) gives an exact closed-form expression for the nth prime:
+## Willans’ Prime Index Structure
+
+The nth prime \( p_n \) satisfies the following Willans-style expression:
 
 \[
-p_n = 1 + \sum_{i=1}^{2^n}
-\left\lfloor  
-    \left( \frac{n}{1 + \pi(i)} \right)^{1/n}  
-\right\rfloor
+p_n 
+= 
+1 +
+\sum_{m=1}^{2^n}
+\mathbf{1}\!\left\{
+1 + \sum_{j=1}^{m} P(j) \le n
+\right\}
 \]
 
-Where:
-- \(\pi(i)\) is the prime-counting function
-- The term becomes **1** if \(\pi(i) < n\) and **0** otherwise
+where:
 
-To compute this, we need a **function that can tell whether i is prime or not**.
-This is where the primality detectors come in.
+- \( P(j) \in \{0,1\} \) is a primality indicator  
+- \( \sum_{j=1}^m P(j) = \pi(m) \) is the prime counting function  
+- The indicator remains \(1\) while \( \pi(m) < n \), and becomes \(0\) when \( \pi(m) = n \)
 
----
-
-# 2.  Trial Division Detector
-
-## 2.1 Mathematical Theorem
-
-Trial division is based on a fundamental property:
-
-> **A composite number must have a factor ≤ √n.**
-
-Equivalently:
+Thus \( p_n \) is the smallest integer for which:
 
 \[
-n \text{ is prime } \iff n > 1 \text{ and no integer } d \in [2,\sqrt{n}] \text{ divides } n.
+\pi(p_n) = n.
 \]
 
-This follows from the fact that if:
-\[
-n = a \cdot b
-\]
-then at least one of \(a, b\) is ≤ √n.
+To evaluate this numerically, we substitute a computational primality test for \( P(j) \).
 
 ---
 
-## 2.2 Trial Division Detector Function
+# Trial Division Primality Detector (Recommended)
 
-```python
-def trial_division_detector(j: int) -> int:
-    if j <= 1:
-        return 0
-    if j == 2:
-        return 1
-    if j % 2 == 0:
-        return 0
+## Mathematical Foundation
 
-    limit = int(math.isqrt(j))
-    for k in range(3, limit + 1, 2):
-        if j % k == 0:
-            return 0
-    return 1
-```
-
-- Returns **1** if j is prime
-- Returns **0** if j is composite
-
-This satisfies the Willans requirement for a primality indicator.
-
----
-
-# 3.  Wilson's Theorem Detector
-
-## 3.1 Mathematical Theorem Behind It
-
-Wilson's theorem states:
+The trial division test relies on the fact:
 
 \[
-p \text{ prime } \iff (p - 1)! \equiv -1 \mod p.
+n \text{ is prime}
+\iff
+n > 1
+\;\wedge\;
+\neg\exists d \in [2, \sqrt{n}] : d \mid n.
 \]
 
-Meaning:
-- For primes, `(p−1)! + 1` is divisible by p
-- For composites, it is never true
-
-This allows the prime indicator:
+This follows from the factorization property:
 
 \[
-W(j) = 1 \text{ if } (j - 1)! \equiv -1 \mod j \text{ else } 0
+n = ab 
+\;\Rightarrow\;
+\min(a, b) \le \sqrt{n}.
 \]
 
----
-
-## 3.2 Wilson Detector Function
-
-```python
-def wilsons_detector(j: int) -> int:
-    if j <= 1:
-        return 1
-
-    fact_mod = 1
-    for k in range(1, j):
-        fact_mod = (fact_mod * k) % j
-        if fact_mod == 0:
-            return 0
-
-    numerator = (fact_mod + 1) % j
-    val = (numerator / j) * math.pi
-    return math.floor((math.cos(val)) ** 2)
-```
-
-Note: The cosine expression is mathematically valid because we only care about the value modulo \(j\), and the cosine collapses to 1 exactly when `(fact_mod + 1) % j == 0`.
+Hence, checking divisibility only up to \( \sqrt{n} \) is sufficient for perfect correctness.
 
 ---
 
-# 4.  Willans Compute Function
+## Detector Definition
 
-The shared compute function determines the nth prime using either detector.
+Let \( T(n) \) denote the trial-division primality indicator:
 
-```python
-def compute_primes_up_to_n(n: int, method: str = "wilson"):
-    if method == "wilson":
-        detector = wilsons_detector
-    elif method == "trial":
-        detector = trial_division_detector
-    else:
-        raise ValueError("method must be 'wilson' or 'trial'")
+\[
+T(n) =
+\begin{cases}
+0, & n \le 1, \\[4pt]
+1, & n = 2, \\[4pt]
+0, & n > 2 \text{ and } n \equiv 0 \pmod 2, \\[6pt]
+1, & \text{no odd divisor } d \le \sqrt{n} \text{ divides } n, \\[4pt]
+0, & \text{otherwise}.
+\end{cases}
+\]
 
-    detector_cache = {}
-    pi_cache = {}
-    primes = []
-    M = 2 ** n
+This detector is:
 
-    for i in range(1, M + 1):
-        if i not in detector_cache:
-            detector_cache[i] = detector(i)
-
-        pi_cache[i] = pi_cache.get(i - 1, 0) + detector_cache[i]
-        pi_i = pi_cache[i]
-
-        if detector_cache[i] == 1:
-            primes.append(i)
-
-        if pi_i == n:
-            return primes, i
-
-    raise RuntimeError("Upper bound failed. Increase M.")
-```
-
-### Output
-- A list of primes ≤ n
-- The nth prime
+- Deterministic  
+- Exact for all integers  
+- Efficient for all practical values of \( n \)
 
 ---
 
-# 5.  Benchmarking & Plotting
+## Why Trial Division Is Much Faster
 
-The script `compare_detectors.py` compares runtimes:
-- Wilson detector vs trial division
-- Plots time vs n
-- Saves output as a PNG
+Wilson's theorem requires evaluating:
 
-### Run benchmark
-```
-python compare_detectors.py
-```
+\[
+(n-1)! \bmod n,
+\]
 
-Produces:
-- `detector_comparison.png`
+which has worst-case cost \( O(n) \) modular multiplications per test.
 
----
+Trial division requires checking only up to \( \sqrt{n} \):
 
-# 6.  CLI Usage
+\[
+O(\sqrt{n}).
+\]
 
-```
-python main.py
-```
-Output example:
-```
-Enter n: 10
-Method ('wilson' or 'trial'): trial
-Primes up to n:
-[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
-Final: 10th prime = 29
-```
+Furthermore:
+
+- Half the integers are eliminated immediately as even  
+- Many composites have small factors  
+- Only primes require checking up to \( \sqrt{n} \)
+
+In practice, trial division is **more than an order of magnitude faster** than Wilson's method, as confirmed by the benchmark graph.
 
 ---
 
-# 7.  Performance Notes
+# Wilson’s Theorem Detector (For Reference Only)
 
-- **Trial division** is *much* faster than Wilson-based detection.
-- Wilson-based method is mostly mathematical interest.
-- Willans’ formula is extremely slow for large n regardless of detector.
+Wilson’s theorem states:
+
+\[
+n \text{ is prime}
+\iff
+(n - 1)! \equiv -1 \pmod n.
+\]
+
+The associated indicator is:
+
+\[
+W(n) =
+\begin{cases}
+1, & (n-1)! + 1 \equiv 0 \pmod n,\\[4pt]
+0, & \text{otherwise}.
+\end{cases}
+\]
+
+While mathematically elegant, the factorial growth makes it computationally expensive, even with modular reduction.  
+This detector is included for completeness but is not recommended for use.
 
 ---
 
-# 8. 📚 References
-- Willans, C. "On Formulae for the nth Prime Number." *The American Mathematical Monthly*, 1949.
-- Wilson, J. Theorem relating factorials and prime numbers.
-- Basic Number Theory — Trial Division and Primality Testing.
+# Modified Willans Prime Computer
+
+The prime generator uses a cumulative counting process:
+
+\[
+\pi(m) = \sum_{j=1}^m P(j),
+\]
+
+and produces:
+
+\[
+p_n =
+\sum_{m=1}^{B(n)}
+\mathbf{1}\!\left\{
+1 + \pi(m) \le n
+\right\},
+\]
+
+terminating as soon as:
+
+\[
+\pi(m) = n.
+\]
+
+Here \( B(n) \) is a safe upper search bound.  
+The classical Willans bound \( 2^n \) is used for structural fidelity, but other bounds may be substituted when using faster detectors like trial division.
 
 ---
 
-#  End
-This README documents the theoretical basis, implementation details, and usage of the Willans prime generator project.
+# Benchmark Results
 
-Feel free to expand with more detectors, optimizations, or visualizations!
+The benchmarking script compares:
+
+- Trial Division Detector  
+- Wilson Detector  
+
+and measures the time to compute successive values of \( n \).
+
+The resulting graph:
+
+![Detector Comparison](detector_comparison.png)
+
+**Observations:**
+
+- Trial division grows slowly and steadily.  
+- Wilson’s method grows quickly and exhibits spikes due to modular factorial operations.  
+- For all \( n \) tested, trial division is far more efficient.
+
+---
+
+# Summary
+
+- Willans’ structure provides a mathematically elegant way to compute prime indices.  
+- The choice of \( P(j) \) (primality detector) dramatically affects performance.  
+- **Trial division** is deterministic, simple, and significantly faster than Wilson’s theorem.  
+- The modified Willans prime computer implemented here is efficient up to moderately large values of \( n \).  
+
+This repository demonstrates how classical number theory and practical primality testing can be combined into a unified prime computation framework.
+

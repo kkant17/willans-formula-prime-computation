@@ -34,7 +34,10 @@ The project provides:
 Willans' formula (1949) gives an exact closed-form expression for the nth prime:
 
 \[
-p_n = 1 + \sum_{i=1}^{2^n} \left\lfloor \left(\frac{n}{1 + \pi(i)}\right)^{1/n} \right\rfloor
+p_n = 1 + \sum_{i=1}^{2^n}
+\left\lfloor  
+    \left( \frac{n}{1 + \pi(i)} \right)^{1/n}  
+\right\rfloor
 \]
 
 Where:

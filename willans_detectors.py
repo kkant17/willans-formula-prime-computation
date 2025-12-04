@@ -14,8 +14,7 @@ def wilsons_detector(j: int) -> int:
             return 0
 
     numerator = (fact_mod + 1) % j
-    val = (numerator / j) * math.pi
-    return math.floor((math.cos(val)) ** 2)
+    return numerator==0
 
 def trial_division_detector(j: int) -> int:
     if j <= 1:
